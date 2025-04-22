@@ -80,7 +80,7 @@ model_dir = os.path.join(os.getcwd(), 'saved_models', model_name + os.sep)
 print(f"Model directory: {model_dir}")
 
 # 添加预训练模型路径
-pretrained_model_path = ""
+pretrained_model_path = "saved_models/u2net/u2net_best_acc_0.9946_epoch_10.pth"
 # 从预训练模型文件名中提取起始epoch
 start_epoch = 0  # 从文件名中提取的epoch数
 print(f"Pretrained model: {pretrained_model_path}")
