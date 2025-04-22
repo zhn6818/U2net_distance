@@ -12,7 +12,10 @@ from model import U2NETP
 from data_loader import RescaleT
 from data_loader import ToTensorLab
 
-pred_size = 512
+# 导入轮廓处理模块
+from u2net_contour_process import process_mask_with_contours
+
+pred_size = 1024
 
 def normPRED(d):
     ma = torch.max(d)
@@ -36,14 +39,19 @@ def read_image(image_path):
         image = image[:,:,np.newaxis]
     return image
 
-def inference_folder(image_dir, model_path, output_dir, model_type='u2net'):
+def inference_folder(image_dir, model_path, output_dir, contour_dir=None, model_type='u2net', 
+                    process_contours=False, contour_threshold=127, min_contour_area=100):
     """
     对文件夹中的所有图片进行推理
     Args:
         image_dir: 输入图片文件夹路径
         model_path: 模型权重文件路径
-        output_dir: 输出目录
+        output_dir: 掩码输出目录
+        contour_dir: 轮廓处理结果输出目录，如果为None则与output_dir相同
         model_type: 使用的模型类型，'u2net' 或 'u2netp'
+        process_contours: 是否进行轮廓处理
+        contour_threshold: 轮廓检测的二值化阈值
+        min_contour_area: 最小轮廓面积
     """
     # 设置设备
     device = get_device()
@@ -79,6 +87,13 @@ def inference_folder(image_dir, model_path, output_dir, model_type='u2net'):
     # 确保输出目录存在
     os.makedirs(output_dir, exist_ok=True)
     
+    # 如果需要轮廓处理，确保轮廓输出目录存在
+    if process_contours:
+        if contour_dir is None:
+            contour_dir = os.path.join(output_dir, 'contours')
+        os.makedirs(contour_dir, exist_ok=True)
+        print(f"Contour processing enabled. Results will be saved to {contour_dir}")
+    
     # 处理每张图片
     for image_path in img_name_list:
         print(f"Processing {image_path}")
@@ -111,9 +126,27 @@ def inference_folder(image_dir, model_path, output_dir, model_type='u2net'):
                 image = io.imread(image_path)
                 imo = im.resize((image.shape[1],image.shape[0]), resample=Image.BILINEAR)
 
-                # 保存结果
+                # 保存掩码结果
                 img_name = os.path.splitext(os.path.basename(image_path))[0]
-                imo.save(os.path.join(output_dir, f"{img_name}.png"))
+                mask_path = os.path.join(output_dir, f"{img_name}.png")
+                imo.save(mask_path)
+                
+                # 如果启用轮廓处理，处理掩码图像
+                if process_contours:
+                    contour_output_path = os.path.join(contour_dir, f"{img_name}_contours.png")
+                    
+                    # 将PIL图像转换为numpy数组用于轮廓处理
+                    mask_np = np.array(imo)
+                    
+                    # 处理掩码图像，查找轮廓和外接矩形
+                    _, contours_info = process_mask_with_contours(
+                        mask_np,
+                        contour_output_path,
+                        threshold=contour_threshold,
+                        min_area=min_contour_area
+                    )
+                    
+                    print(f"Found {len(contours_info)} contours in {img_name}")
 
                 del d1,d2,d3,d4,d5,d6,d7
 
@@ -122,17 +155,27 @@ def inference_folder(image_dir, model_path, output_dir, model_type='u2net'):
             continue
 
     print(f"Processing completed. Results saved in {output_dir}")
+    if process_contours:
+        print(f"Contour processing results saved in {contour_dir}")
 
 if __name__ == "__main__":
     # 示例使用
     model_type = 'u2net'
     image_dir = 'train/img/'
-    model_path = 'saved_models/u2net/u2net_best_acc_0.9946_epoch_10.pth'
+    model_path = 'saved_models/u2net/u2net_best_acc_0.9995_epoch_78.pth'
     output_dir = 'test_results/'
+    
+    # 启用轮廓处理
+    process_contours = True
+    contour_dir = 'contour_results/'
     
     inference_folder(
         image_dir=image_dir,
         model_path=model_path,
         output_dir=output_dir,
-        model_type=model_type
+        contour_dir=contour_dir,
+        model_type=model_type,
+        process_contours=process_contours,
+        contour_threshold=127,  # 二值化阈值
+        min_contour_area=100    # 最小轮廓面积
     ) 
